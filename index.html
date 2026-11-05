@@ -91,7 +91,7 @@ footer{border-top:1px solid var(--hair);padding:56px 24px;text-align:center;colo
 <div class="fld"><label class="caps">Shoes in photograph</label><select id="shoes"><option value="0">No</option><option value="2.5">Flat</option><option value="7">Heels</option></select></div>
 </div>
 <div class="caps" style="color:var(--tan);margin-top:64px">II — Photograph</div><h2>Standing naturally.</h2>
-<p class="hint">Head to feet in frame, arms a little away from the body, in close-fitting clothing. Daylight, if you have it.</p>
+<p class="hint">Head to feet in frame, arms held a little away from the body so daylight shows between arm and waist, in close-fitting clothing.</p>
 <div class="ph">
 <div class="tile" id="d1" onclick="pick('f1')"><div class="t">Facing the camera</div><div class="s caps">Required</div></div>
 <div class="tile" id="d2" onclick="pick('f2')"><div class="t">In profile</div><div class="s caps">Optional</div></div></div>
@@ -200,36 +200,43 @@ function runPipeline(canvases){
  if(F.orient<0.14)throw'That photograph appears to be in profile. Please add one facing the camera.';
  const sf=Hcm/F.pxH,P=F.p,X=i=>P[i].x*F.mw,Y=i=>P[i].y*F.mh,d=(a,b)=>Math.hypot(X(a)-X(b),Y(a)-Y(b));
  const shY=(Y(L.lsh)+Y(L.rsh))/2,hipY=(Y(L.lhip)+Y(L.rhip))/2,torso=hipY-shY,earY=(Y(L.lear)+Y(L.rear))/2,kneeY=(Y(L.lkn)+Y(L.rkn))/2;
+ const shCm=d(L.lsh,L.rsh)*sf,hipCm=d(L.lhip,L.rhip)*sf;
  const R=sex==='f'?{bust:.30,under:.42,waist:.64,high:1.0,hip:1.18}:{chest:.24,waist:.64,hip:1.10};
+ // Anthropometric ceilings on silhouette width (stops arms-against-body from inflating girths)
+ const LIM=sex==='f'?{bust:shCm*1.02,under:shCm*.95,waist:shCm*.98,high:Math.max(shCm*1.05,hipCm*2.2),hip:Math.max(shCm*1.12,hipCm*2.4)}:{chest:shCm*1.05,waist:shCm*1.0,hip:Math.max(shCm*1.05,hipCm*2.3)};
  const rows={neck:shY-0.45*(shY-earY)};for(const k in R)rows[k]=shY+R[k]*torso;
- const widthCm=k=>F.runW(rows[k])*sf;
+ let clamped=false;const widthCm=k=>{let w=F.runW(rows[k])*sf;if(LIM[k]&&w>LIM[k]){clamped=true;w=LIM[k]}return w};
  const bmi=Wkg?Wkg/((Hcm/100)**2):(sex==='f'?22:23);const kk=Math.max(.85,Math.min(1.25,1+0.014*(bmi-(sex==='f'?22:23))));
  const DR=sex==='f'?{bust:.74,under:.70,waist:.74,high:.76,hip:.80}:{chest:.70,waist:.78,hip:.72};
  let depth={},est=!S;const girthKeys=Object.keys(R);
- if(S){const q=S.p,ss=Hcm/S.pxH,sy=(q[L.lsh].y+q[L.rsh].y)/2*S.mh,hy=(q[L.lhip].y+q[L.rhip].y)/2*S.mh,t=hy-sy;S.rows={};girthKeys.forEach(k=>{S.rows[k]=sy+R[k]*t;depth[k]=S.runW(S.rows[k])*ss})}
+ if(S){const q=S.p,ss=Hcm/S.pxH,sy=(q[L.lsh].y+q[L.rsh].y)/2*S.mh,hy=(q[L.lhip].y+q[L.rhip].y)/2*S.mh,t=hy-sy;S.rows={};girthKeys.forEach(k=>{S.rows[k]=sy+R[k]*t;const w=widthCm(k);depth[k]=Math.max(w*.5,Math.min(w*1.0,S.runW(S.rows[k])*ss))})}
  else girthKeys.forEach(k=>depth[k]=widthCm(k)*DR[k]*kk);
  const G=k=>ell(widthCm(k),depth[k]);const nape=shY-0.07*torso,floor=F.bot;
  const sleeve=((d(L.lsh,L.lel)+d(L.lel,L.lwr)+d(L.rsh,L.rel)+d(L.rel,L.rwr))/2)*sf+2;
+ const neckW=Math.min(F.runW(rows.neck)*sf,shCm*.42);
  let M,sizes,figKeys;
  if(sex==='f'){
-  M=[['Bust',G('bust'),est],['Underbust',G('under')*0.97,true],['Waist',G('waist'),est],['High hip',G('high'),est],['Hip',G('hip'),est],
-   ['Shoulders',d(L.lsh,L.rsh)*sf*1.04,false],['Sleeve',sleeve,false],['Nape to waist',(rows.waist-nape)*sf,false],['Waist to hip',(rows.hip-rows.waist)*sf,false],
+  M=[['Bust',G('bust'),est||clamped],['Underbust',G('under')*0.97,true],['Waist',G('waist'),est||clamped],['High hip',G('high'),est||clamped],['Hip',G('hip'),est||clamped],
+   ['Shoulders',shCm*1.04,false],['Sleeve',sleeve,false],['Nape to waist',(rows.waist-nape)*sf,false],['Waist to hip',(rows.hip-rows.waist)*sf,false],
    ['Waist to knee',(kneeY-rows.waist)*sf,false],['Waist to floor',(floor-rows.waist)*sf,false],['Nape to floor',(floor-nape)*sf,false],['Height',Hcm,false]];
   const b=M[0][1],w=M[2][1],h=M[4][1];const uk=Math.max(4,Math.min(28,2*Math.round((8+2*Math.max((b-82)/4.6,(h-88)/4.6))/2)));
   const shape=(Math.abs(b-h)<=4&&b-w>=20)?'Hourglass':(h-b>=5)?'Pear':(b-h>=5)?'Inverted':'Straight';
-  sizes=[['Dress size',`UK ${uk}`],['EU · US',`${uk+28} · ${uk-4}`],['Silhouette',shape]];figKeys=['bust','waist','hip']}
+  sizes=[['UK',`${uk}`],['IT · EU · US',`${uk+32} · ${uk+28} · ${uk-4}`],['Silhouette',shape]];figKeys=['bust','waist','hip']}
  else{
-  M=[['Chest',G('chest'),est],['Waist',G('waist'),est],['Trouser waist',G('waist')+3,est],['Seat',G('hip'),est],['Neck',Math.PI*widthCm('neck')*1.04,false],
-   ['Shoulders',d(L.lsh,L.rsh)*sf*1.06,false],['Sleeve',sleeve,false],['Jacket length',(floor-nape)*sf/2,false],['Back length',(rows.waist-nape)*sf,false],
+  M=[['Chest',G('chest'),est||clamped],['Waist',G('waist'),est||clamped],['Trouser waist',G('waist')+3,est||clamped],['Seat',G('hip'),est||clamped],['Neck',Math.PI*neckW*1.04,false],
+   ['Shoulders',shCm*1.06,false],['Sleeve',sleeve,false],['Jacket length',(floor-nape)*sf/2,false],['Back length',(rows.waist-nape)*sf,false],
    ['Inseam',F.crotch?(floor-F.crotch)*sf-1.5:NaN,!F.crotch],['Outseam',(floor-rows.waist)*sf,false],['Height',Hcm,false]];
-  const ci=M[0][1]/2.54,drop=(M[0][1]-M[1][1])/2.54,uk=Math.round(ci/2)*2,jl=M[7][1],len=jl<72?'S':jl>78?'L':'R';
-  sizes=[['Jacket',`${uk}${len}`],['Trouser',`${Math.round(M[2][1]/2.54)} × ${Math.round(M[9][1]/2.54)||'—'}`],['Build',drop>=8?'Athletic':drop>=5?'Regular':'Generous']];figKeys=['chest','waist','hip']}
+  const ci=M[0][1]/2.54,drop=(M[0][1]-M[1][1])/2.54,uk=Math.max(32,Math.min(60,Math.round(ci/2)*2)),jl=M[7][1],len=jl<72?'S':jl>78?'L':'R';
+  sizes=[['Jacket · UK/US',`${uk}${len}`],['Jacket · IT/EU',`${uk+10}`],['Trouser · W × L',`${Math.round(M[2][1]/2.54)} × ${Math.round(M[9][1]/2.54)||'—'}`]];
+  M.splice(4,0,['Build',NaN,false]);M[4]=['Drop',(M[0][1]-M[1][1]),false];figKeys=['chest','waist','hip']}
  go('s3');const tbl=$('tbl');tbl.innerHTML='';
  M.forEach(([n,v,e])=>{if(isNaN(v))return;tbl.innerHTML+=`<li><span>${n}</span><span><span class="v">${v.toFixed(1)} cm</span>${e?'<span class="e">est.</span>':''}</span></li>`});
  sizes.forEach(([k,v],i)=>{$('k'+(i+1)).textContent=k;$('v'+(i+1)).textContent=v});
- $('note').textContent=S?'Measured from your front and profile photographs.':'Measured from a single photograph. A profile photograph refines the girth measurements.';
+ let note=S?'Measured from your front and profile photographs.':'Measured from a single photograph. A profile photograph refines the girth measurements.';
+ if(clamped)note+=' Arms were close to the body, so chest, waist and hip were estimated from your proportions — a photograph with the arms held slightly away will measure them directly.';
+ $('note').textContent=note;
  annotate('t1',F,rows,figKeys);if(S)annotate('t2',S,S.rows,figKeys);$('fig').classList.toggle('one',!S);$('t2').style.display=S?'':'none';
- const out={customer:{sex:sex==='f'?'female':'male',height_cm:Hcm,weight_kg:Wkg,fit:$('fit').value},measurements_cm:Object.fromEntries(M.filter(x=>!isNaN(x[1])).map(([n,v])=>[n,+v.toFixed(1)])),suggested:Object.fromEntries(sizes),method:S?'front+side':'front-only',ts:new Date().toISOString()};
+ const out={customer:{sex:sex==='f'?'female':'male',height_cm:Hcm,weight_kg:Wkg,fit:$('fit').value},measurements_cm:Object.fromEntries(M.filter(x=>!isNaN(x[1])).map(([n,v])=>[n,+v.toFixed(1)])),suggested:Object.fromEntries(sizes),method:S?'front+side':'front-only',arms_clamped:clamped,ts:new Date().toISOString()};
  const json=JSON.stringify(out);$('payload').value=json;try{sessionStorage.setItem('atelier_measurements',json);localStorage.setItem('atelier_last',json)}catch(e){}
  try{window.parent!==window&&window.parent.postMessage({type:'measurements',data:out},'*')}catch(e){}
  const txt=M.filter(x=>!isNaN(x[1])).map(([n,v])=>`${n}: ${v.toFixed(1)} cm`).join('\n')+'\n'+sizes.map(([k,v])=>`${k}: ${v}`).join('\n');
